@@ -46,3 +46,12 @@ What it does:
 - Requires Bun v1.3+ and a POSIX-like environment for PTY support.
 - Python 3 must be available (used to host the PTY without native Node addons).
 - The UI will resize the remote PTY to match the browser window automatically.
+
+## Build a standalone binary
+
+You can produce a self-contained executable that embeds the ghostty-web client and Python PTY helper:
+
+```bash
+bun build index.ts --compile --outfile webify
+./webify --port 8080 -- bash
+```
