@@ -16,6 +16,12 @@ Start any command inside a browser terminal (default port `8080`):
 bun run webify -- -- bash
 ```
 
+You can also omit the separator if you’re not passing flags:
+
+```bash
+webify bash -lc "echo hi"
+```
+
 Pick a different port and pass arguments:
 
 ```bash

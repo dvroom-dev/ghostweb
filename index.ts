@@ -39,17 +39,20 @@ function usage(code: number = 1): never {
 function parseArgs(argv: string[]): CliOptions {
   let port = 8080;
   let autoOpen = true;
+  const command: string[] = [];
 
-  const separatorIndex = argv.indexOf("--");
-  const flagArgs = separatorIndex === -1 ? argv : argv.slice(0, separatorIndex);
-  const command = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
 
-  for (let i = 0; i < flagArgs.length; i += 1) {
-    const arg = flagArgs[i];
+    if (arg === "--") {
+      command.push(...argv.slice(i + 1));
+      break;
+    }
+
     switch (arg) {
       case "--port":
       case "-p": {
-        const next = flagArgs[i + 1];
+        const next = argv[i + 1];
         if (!next) {
           console.error("Missing value after --port");
           usage();
@@ -59,7 +62,7 @@ function parseArgs(argv: string[]): CliOptions {
           console.error(`Invalid port: ${next}`);
           usage();
         }
-        i += 1;
+        i += 1; // skip port value
         break;
       }
       case "--no-open": {
@@ -72,8 +75,11 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       }
       default: {
-        console.error(`Unknown flag: ${arg}`);
-        usage();
+        // Treat the first unknown token as the start of the command, so
+        // `webify cmd args...` works without requiring `--`.
+        command.push(...argv.slice(i));
+        i = argv.length;
+        break;
       }
     }
   }
