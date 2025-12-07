@@ -1,8 +1,13 @@
 {
   "name": "ghostweb",
+  "version": "0.1.0",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robotButler/ghostweb.git"
+  },
   "bin": {
     "ghostweb": "./index.ts"
   },

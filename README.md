@@ -6,6 +6,8 @@ A tiny launcher for serving interactive CLIs/TUIs through the browser with [ghos
 
 ```bash
 bun install
+# or global from GitHub until an npm publish happens:
+# npm i -g robotButler/ghostweb
 ```
 
 ## Usage
