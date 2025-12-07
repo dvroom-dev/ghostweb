@@ -1,13 +1,13 @@
 {
-  "name": "webghost",
+  "name": "ghostweb",
   "module": "index.ts",
   "type": "module",
   "private": true,
   "bin": {
-    "webghost": "./index.ts"
+    "ghostweb": "./index.ts"
   },
   "scripts": {
-    "webghost": "bun run index.ts",
+    "ghostweb": "bun run index.ts",
     "test": "bun test"
   },
   "devDependencies": {

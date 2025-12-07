@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "webghost",
+      "name": "ghostweb",
       "dependencies": {
         "ghostty-web": "^0.3.0",
       },

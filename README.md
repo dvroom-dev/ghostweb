@@ -1,4 +1,4 @@
-# webghost
+# ghostweb
 
 A tiny launcher for serving interactive CLIs/TUIs through the browser with [ghostty-web](https://github.com/coder/ghostty-web).
 
@@ -13,19 +13,19 @@ bun install
 Start any command inside a browser terminal (default port `8080`):
 
 ```bash
-bun run webghost -- -- bash
+bun run ghostweb -- -- bash
 ```
 
 You can also omit the separator if you’re not passing flags:
 
 ```bash
-webghost bash -lc "echo hi"
+ghostweb bash -lc "echo hi"
 ```
 
 Pick a different port and pass arguments:
 
 ```bash
-bun run webghost -- --port 8081 -- claude --dangerously-skip-permissions
+bun run ghostweb -- --port 8081 -- claude --dangerously-skip-permissions
 ```
 
 Flags:
@@ -52,8 +52,8 @@ What it does:
 You can produce a self-contained executable that embeds the ghostty-web client and Python PTY helper:
 
 ```bash
-bun build index.ts --compile --outfile webghost
-./webghost --port 8080 -- bash
+bun build index.ts --compile --outfile ghostweb
+./ghostweb --port 8080 -- bash
 ```
 
 ## Distribution recommendations
@@ -61,11 +61,11 @@ bun build index.ts --compile --outfile webghost
 Two easy ways to ship this:
 
 - **Publish as an npm package** (works with npm, pnpm, yarn, bun):
-  - Keep `bin.webghost` pointing at `index.ts` with the Bun shebang.
+  - Keep `bin.ghostweb` pointing at `index.ts` with the Bun shebang.
   - Run `npm publish` (or `bun publish`) from the project root.
-  - Users install globally with `npm i -g webghost` or `bun install --global webghost` and run `webghost`.
+  - Users install globally with `npm i -g ghostweb` or `bun install --global ghostweb` and run `ghostweb`.
 - **Attach prebuilt binaries** for convenience:
-  - Build per target: `bun build index.ts --compile --outfile webghost-linux-x64` (and similarly for other platforms via your CI matrix).
+  - Build per target: `bun build index.ts --compile --outfile ghostweb-linux-x64` (and similarly for other platforms via your CI matrix).
   - Upload the artifacts (e.g., GitHub Releases) and document the Python 3 requirement for the PTY proxy.
 
 Notes when distributing:

@@ -11,6 +11,6 @@ test("prints help without starting server", async () => {
   const stderr = await new Response(proc.stderr ?? null).text();
 
   expect(exitCode).toBe(0);
-  expect(stdout).toContain("Usage: webghost");
+  expect(stdout).toContain("Usage: ghostweb");
   expect(stderr.trim().length).toBe(0);
 });

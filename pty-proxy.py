@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lightweight PTY proxy used by the webghost CLI.
+Lightweight PTY proxy used by the ghostweb CLI.
 
 The script spawns a command inside a pseudo-terminal and proxies
 stdin/stdout over newline-delimited JSON messages. Payloads that
