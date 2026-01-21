@@ -565,7 +565,26 @@ function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void):
 
 const args = parseArgs(process.argv.slice(2));
 
-const ghosttyDist = join(__dirname, "node_modules", "ghostty-web", "dist");
+function findGhosttyDist(): string {
+  const possiblePaths = [
+    // Development: running from source
+    join(__dirname, "node_modules", "ghostty-web", "dist"),
+    // Built: cli.js in dist/, node_modules at package root
+    join(__dirname, "..", "node_modules", "ghostty-web", "dist"),
+    // npm installed with hoisting: ghostty-web is a sibling
+    join(__dirname, "..", "..", "ghostty-web", "dist"),
+  ];
+
+  for (const p of possiblePaths) {
+    if (existsSync(join(p, "ghostty-web.js"))) {
+      return p;
+    }
+  }
+
+  throw new Error("Could not find ghostty-web. Make sure ghostty-web is installed.");
+}
+
+const ghosttyDist = findGhosttyDist();
 
 const ghosttyFiles = new Map<string, string>([
   ["/ghostty-web.js", join(ghosttyDist, "ghostty-web.js")],
