@@ -5,9 +5,9 @@ A tiny launcher for serving interactive CLIs/TUIs through the browser with [ghos
 ## Install
 
 ```bash
-bun install
-# or global from GitHub until an npm publish happens:
-# npm i -g robotButler/ghostweb
+npm i -g @dvroom-dev/ghostweb
+# or with bun:
+bun install -g @dvroom-dev/ghostweb
 ```
 
 ## Usage
@@ -63,9 +63,8 @@ bun build index.ts --compile --outfile ghostweb
 Two easy ways to ship this:
 
 - **Publish as an npm package** (works with npm, pnpm, yarn, bun):
-  - Keep `bin.ghostweb` pointing at `index.ts` with the Bun shebang.
-  - Run `npm publish` (or `bun publish`) from the project root.
-  - Users install globally with `npm i -g ghostweb` or `bun install --global ghostweb` and run `ghostweb`.
+  - Run `npm publish` from the project root (builds automatically via prepublishOnly).
+  - Users install globally with `npm i -g @dvroom-dev/ghostweb` and run `ghostweb`.
 - **Attach prebuilt binaries** for convenience:
   - Build per target: `bun build index.ts --compile --outfile ghostweb-linux-x64` (and similarly for other platforms via your CI matrix).
   - Upload the artifacts (e.g., GitHub Releases) and document the Python 3 requirement for the PTY proxy.

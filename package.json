@@ -1,6 +1,6 @@
 {
-  "name": "ghostweb",
-  "version": "0.1.0",
+  "name": "@dvroom-dev/ghostweb",
+  "version": "0.1.1",
   "module": "index.ts",
   "type": "module",
   "private": false,
@@ -22,12 +22,17 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/ws": "^8.18.1"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "ghostty-web": "^0.3.0"
+    "ghostty-web": "^0.3.0",
+    "ws": "^8.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

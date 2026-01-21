@@ -1,8 +1,11 @@
-#!/usr/bin/env bun
-import type { ServerWebSocket } from "bun";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+#!/usr/bin/env node
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
+import { WebSocketServer, type WebSocket } from "ws";
 
 type CliOptions = {
   port: number;
@@ -18,19 +21,15 @@ type ServerMessage =
   | { type: "output"; data: string }
   | { type: "exit"; code?: number; signal?: number };
 
-const encoder = new TextEncoder();
-const lineDecoder = new TextDecoder();
-const messageDecoder = new TextDecoder();
-const outputDecoder = new TextDecoder();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROXY_SOURCE = `#!/usr/bin/env python3
-\"\"\"
+"""
 Lightweight PTY proxy used by the ghostweb CLI.
 
 The script spawns a command inside a pseudo-terminal and proxies
 stdin/stdout over newline-delimited JSON messages. Payloads that
 represent terminal data are base64-encoded to keep the stream text-safe.
-\"\"\"
+"""
 
 import base64
 import json
@@ -43,25 +42,25 @@ import fcntl
 
 
 def set_winsize(fd: int, rows: int, cols: int) -> None:
-  \"\"\"Update the PTY window size.\"\"\"
-  fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack(\"HHHH\", rows, cols, 0, 0))
+  """Update the PTY window size."""
+  fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
 
 def send(message: dict) -> None:
-  sys.stdout.write(json.dumps(message) + \"\\n\")
+  sys.stdout.write(json.dumps(message) + "\\n")
   sys.stdout.flush()
 
 
 def main() -> int:
   if len(sys.argv) < 2:
-    sys.stderr.write(\"pty-proxy: missing command to execute\\n\")
+    sys.stderr.write("pty-proxy: missing command to execute\\n")
     return 1
 
   cmd = sys.argv[1:]
-  if cmd and cmd[0] == \"--\":
+  if cmd and cmd[0] == "--":
     cmd = cmd[1:]
   if not cmd:
-    sys.stderr.write(\"pty-proxy: missing command after '--'\\n\")
+    sys.stderr.write("pty-proxy: missing command after '--'\\n")
     return 1
 
   pid, master_fd = os.forkpty()
@@ -69,10 +68,10 @@ def main() -> int:
     try:
       os.execvp(cmd[0], cmd)
     except Exception as exc:  # pragma: no cover - best effort error path
-      sys.stderr.write(f\"exec failed: {exc}\\n\")
+      sys.stderr.write(f"exec failed: {exc}\\n")
       os._exit(1)
 
-  buffer = \"\"
+  buffer = ""
 
   try:
     while True:
@@ -82,10 +81,10 @@ def main() -> int:
         try:
           data = os.read(master_fd, 8192)
         except OSError:
-          data = b\"\"
+          data = b""
         if not data:
           break
-        send({\"type\": \"output\", \"data\": base64.b64encode(data).decode(\"ascii\")})
+        send({"type": "output", "data": base64.b64encode(data).decode("ascii")})
 
       if sys.stdin in readable:
         line = sys.stdin.readline()
@@ -96,17 +95,17 @@ def main() -> int:
         except json.JSONDecodeError:
           continue
 
-        m_type = message.get(\"type\")
-        if m_type == \"input\":
-          payload = message.get(\"data\", \"\")
+        m_type = message.get("type")
+        if m_type == "input":
+          payload = message.get("data", "")
           if isinstance(payload, str):
             try:
               os.write(master_fd, base64.b64decode(payload))
             except Exception:
               pass
-        elif m_type == \"resize\":
-          cols = int(message.get(\"cols\", 0) or 0)
-          rows = int(message.get(\"rows\", 0) or 0)
+        elif m_type == "resize":
+          cols = int(message.get("cols", 0) or 0)
+          rows = int(message.get("rows", 0) or 0)
           if cols > 0 and rows > 0:
             try:
               set_winsize(master_fd, rows, cols)
@@ -120,7 +119,7 @@ def main() -> int:
       code = os.WEXITSTATUS(status)
     elif os.WIFSIGNALED(status):
       signal_num = os.WTERMSIG(status)
-    send({\"type\": \"exit\", \"code\": code, \"signal\": signal_num})
+    send({"type": "exit", "code": code, "signal": signal_num})
     try:
       os.close(master_fd)
     except Exception:
@@ -129,7 +128,7 @@ def main() -> int:
   return 0
 
 
-if __name__ == \"__main__\":
+if __name__ == "__main__":
   sys.exit(main())
 `;
 
@@ -445,7 +444,7 @@ function ensureProxyScript(): string {
     return projectPath;
   }
 
-  const cacheBase = Bun.env.XDG_CACHE_HOME ?? (Bun.env.HOME ? join(Bun.env.HOME, ".cache") : "/tmp");
+  const cacheBase = process.env.XDG_CACHE_HOME ?? (process.env.HOME ? join(process.env.HOME, ".cache") : "/tmp");
   const targetDir = join(cacheBase, "ghostweb");
   try {
     mkdirSync(targetDir, { recursive: true });
@@ -473,11 +472,8 @@ function ensureProxyScript(): string {
 
 function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void): PtyProxy {
   const proxyScript = ensureProxyScript();
-  const subprocess = Bun.spawn({
-    cmd: ["python3", "-u", proxyScript, "--", ...command],
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
+  const subprocess = spawn("python3", ["-u", proxyScript, "--", ...command], {
+    stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       TERM: process.env.TERM ?? "xterm-256color",
@@ -491,67 +487,51 @@ function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void):
 
   let exitSent = false;
 
-  const send = (payload: object) => {
-    if (typeof stdin.write === "function") {
-      stdin.write(`${JSON.stringify(payload)}\n`);
-    }
+  const sendToProxy = (payload: object) => {
+    stdin.write(`${JSON.stringify(payload)}\n`);
   };
 
-  const forwardOutput = async () => {
-    const reader = stdout.getReader();
-    let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += lineDecoder.decode(value, { stream: true });
-      let newlineIndex;
-      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, newlineIndex).trim();
-        buffer = buffer.slice(newlineIndex + 1);
-        if (!line) continue;
-        try {
-          const event = JSON.parse(line) as ProxyEvent;
-          onEvent(event);
-          if (event.type === "exit") {
-            exitSent = true;
-          }
-        } catch (error) {
-          console.error("Failed to parse PTY proxy message:", error, line);
-        }
+  // Read stdout line by line
+  const rl = createInterface({ input: stdout });
+  rl.on("line", (line) => {
+    if (!line.trim()) return;
+    try {
+      const event = JSON.parse(line) as ProxyEvent;
+      onEvent(event);
+      if (event.type === "exit") {
+        exitSent = true;
       }
+    } catch (error) {
+      console.error("Failed to parse PTY proxy message:", error, line);
     }
-  };
+  });
 
-  forwardOutput().catch((error) => console.error("PTY proxy stream failed:", error));
-
+  // Forward stderr
   if (stderr) {
-    (async () => {
-      const reader = stderr.getReader();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const message = lineDecoder.decode(value);
-        if (message.trim().length > 0) {
-          console.error("[pty-proxy]", message.trim());
-        }
+    const stderrRl = createInterface({ input: stderr });
+    stderrRl.on("line", (line) => {
+      if (line.trim().length > 0) {
+        console.error("[pty-proxy]", line);
       }
-    })().catch((error) => console.error("PTY proxy stderr failed:", error));
+    });
   }
 
-  subprocess.exited
-    .then(() => {
-      if (!exitSent) {
-        onEvent({ type: "exit", code: subprocess.exitCode, signal: null });
-      }
-    })
-    .catch((error) => console.error("Proxy exit error:", error));
+  subprocess.on("close", (code, signal) => {
+    if (!exitSent) {
+      onEvent({ type: "exit", code: code ?? undefined, signal: signal ? 1 : undefined });
+    }
+  });
+
+  subprocess.on("error", (error) => {
+    console.error("Proxy error:", error);
+  });
 
   return {
     write(data: string) {
-      send({ type: "input", data: Buffer.from(data, "utf-8").toString("base64") });
+      sendToProxy({ type: "input", data: Buffer.from(data, "utf-8").toString("base64") });
     },
     resize(cols: number, rows: number) {
-      send({ type: "resize", cols, rows });
+      sendToProxy({ type: "resize", cols, rows });
     },
     stop() {
       try {
@@ -596,38 +576,22 @@ const mimeLookup: Record<string, string> = {
   ".js": "application/javascript",
   ".wasm": "application/wasm",
   ".cjs": "application/javascript",
+  ".html": "text/html",
 };
 
-const clients = new Set<ServerWebSocket>();
-let server: ReturnType<typeof Bun.serve> | null = null;
+const clients = new Set<WebSocket>();
+let httpServer: ReturnType<typeof createServer> | null = null;
+let wss: WebSocketServer | null = null;
 let shuttingDown = false;
 let ptyProxy: PtyProxy;
-try {
-  ptyProxy = startPtyProxy(args.command, (event) => {
-    if (event.type === "output") {
-      const decoded = outputDecoder.decode(Buffer.from(event.data, "base64"), { stream: true });
-      if (decoded.length > 0) {
-        broadcast({ type: "output", data: decoded });
-      }
-    } else if (event.type === "exit") {
-      const remaining = outputDecoder.decode();
-      if (remaining.length > 0) {
-        broadcast({ type: "output", data: remaining });
-      }
-      broadcast({ type: "exit", code: event.code ?? undefined, signal: event.signal ?? undefined });
-      stopServerSoon();
-    }
-  });
-} catch (error) {
-  console.error("Failed to start command:", error);
-  process.exit(1);
-}
 
 function broadcast(message: ServerMessage) {
   const serialized = JSON.stringify(message);
   for (const client of clients) {
     try {
-      client.send(serialized);
+      if (client.readyState === client.OPEN) {
+        client.send(serialized);
+      }
     } catch {
       // Ignore broken pipes
     }
@@ -638,13 +602,14 @@ function stopServerSoon() {
   if (shuttingDown) return;
   shuttingDown = true;
   setTimeout(() => {
-    server?.stop();
+    wss?.close();
+    httpServer?.close();
     ptyProxy.stop();
   }, 500);
 }
 
 function handleClientMessage(raw: string | Buffer) {
-  const text = typeof raw === "string" ? raw : messageDecoder.decode(raw);
+  const text = typeof raw === "string" ? raw : raw.toString("utf-8");
   let parsed: ClientMessage;
   try {
     parsed = JSON.parse(text) as ClientMessage;
@@ -672,74 +637,107 @@ function handleClientMessage(raw: string | Buffer) {
   }
 }
 
-server = Bun.serve({
-  port: args.port,
-  fetch(req, server) {
-    const url = new URL(req.url);
-    if (url.pathname === "/ws") {
-      if (server.upgrade(req)) {
-        return undefined;
+// Start PTY proxy
+try {
+  ptyProxy = startPtyProxy(args.command, (event) => {
+    if (event.type === "output") {
+      const decoded = Buffer.from(event.data, "base64").toString("utf-8");
+      if (decoded.length > 0) {
+        broadcast({ type: "output", data: decoded });
       }
-      return new Response("WebSocket upgrade failed", { status: 400 });
+    } else if (event.type === "exit") {
+      broadcast({ type: "exit", code: event.code ?? undefined, signal: event.signal ?? undefined });
+      stopServerSoon();
     }
+  });
+} catch (error) {
+  console.error("Failed to start command:", error);
+  process.exit(1);
+}
 
-    if (url.pathname === "/app.js") {
-      return new Response(APP_JS, {
-        headers: {
-          "Content-Type": "application/javascript",
-          "Cache-Control": "no-store",
-        },
-      });
-    }
+// Create HTTP server
+httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${args.port}`);
 
-    const ghosttyPath = ghosttyFiles.get(url.pathname);
-    if (ghosttyPath) {
-      const file = Bun.file(ghosttyPath);
-      const contentType =
-        mimeLookup[url.pathname.slice(url.pathname.lastIndexOf("."))] ??
-        "application/octet-stream";
-      return new Response(file, {
-        headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=86400" },
-      });
-    }
-
-    return new Response(buildClientHtml(args.command.join(" ")), {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
+  // Serve app.js
+  if (url.pathname === "/app.js") {
+    res.writeHead(200, {
+      "Content-Type": "application/javascript",
+      "Cache-Control": "no-store",
     });
-  },
-  websocket: {
-    open(ws) {
-      clients.add(ws);
-      ws.send(JSON.stringify({ type: "output", data: "" }));
-    },
-    close(ws) {
-      clients.delete(ws);
-    },
-    message(ws, message) {
-      handleClientMessage(message);
-    },
-  },
+    res.end(APP_JS);
+    return;
+  }
+
+  // Serve ghostty-web files
+  const ghosttyPath = ghosttyFiles.get(url.pathname);
+  if (ghosttyPath && existsSync(ghosttyPath)) {
+    const ext = extname(ghosttyPath);
+    const contentType = mimeLookup[ext] ?? "application/octet-stream";
+    const stat = statSync(ghosttyPath);
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Content-Length": stat.size,
+      "Cache-Control": "public, max-age=86400",
+    });
+    createReadStream(ghosttyPath).pipe(res);
+    return;
+  }
+
+  // Serve index HTML for all other routes
+  const html = buildClientHtml(args.command.join(" "));
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(html);
+});
+
+// Create WebSocket server
+wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
+wss.on("connection", (ws: WebSocket) => {
+  clients.add(ws);
+  ws.send(JSON.stringify({ type: "output", data: "" }));
+
+  ws.on("message", (message: Buffer | string) => {
+    handleClientMessage(message);
+  });
+
+  ws.on("close", () => {
+    clients.delete(ws);
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+    clients.delete(ws);
+  });
+});
+
+// Start server
+httpServer.listen(args.port, () => {
+  const url = `http://localhost:${args.port}`;
+  console.log(`Serving ghostty-web at ${url}`);
+  console.log(`Running: ${args.command.map(shellEscape).join(" ")}`);
+
+  if (args.autoOpen) {
+    openBrowser(url);
+  }
 });
 
 const handleShutdown = () => {
   ptyProxy.stop();
-  server?.stop();
+  wss?.close();
+  httpServer?.close();
 };
 
 process.on("SIGINT", handleShutdown);
 process.on("SIGTERM", handleShutdown);
 process.on("exit", () => ptyProxy.stop());
 
-const url = `http://localhost:${args.port}`;
-console.log(`Serving ghostty-web at ${url}`);
-console.log(`Running: ${args.command.map(shellEscape).join(" ")}`);
-
 function openBrowser(target: string) {
   const platform = process.platform;
-  const command =
+  const cmd =
     platform === "darwin"
       ? ["open", target]
       : platform === "win32"
@@ -747,12 +745,12 @@ function openBrowser(target: string) {
         : ["xdg-open", target];
 
   try {
-    Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+    const child = spawn(cmd[0], cmd.slice(1), {
+      stdio: "ignore",
+      detached: true,
+    });
+    child.unref();
   } catch (error) {
     console.warn("Unable to auto-open browser:", error);
   }
-}
-
-if (args.autoOpen) {
-  openBrowser(url);
 }
