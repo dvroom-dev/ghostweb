@@ -507,8 +507,9 @@ function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void):
   });
 
   // Forward stderr
+  let stderrRl: ReturnType<typeof createInterface> | null = null;
   if (stderr) {
-    const stderrRl = createInterface({ input: stderr });
+    stderrRl = createInterface({ input: stderr });
     stderrRl.on("line", (line) => {
       if (line.trim().length > 0) {
         console.error("[pty-proxy]", line);
@@ -534,8 +535,16 @@ function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void):
       sendToProxy({ type: "resize", cols, rows });
     },
     stop() {
+      // Close readline interfaces to release event loop
+      rl.close();
+      stderrRl?.close();
+      // Destroy streams
+      stdin.destroy();
+      stdout.destroy();
+      stderr?.destroy();
+      // Kill subprocess with SIGKILL for immediate termination
       try {
-        subprocess.kill();
+        subprocess.kill("SIGKILL");
       } catch {
         // ignore
       }
@@ -725,14 +734,18 @@ httpServer.listen(args.port, () => {
   }
 });
 
+let shuttingDownFromSignal = false;
 const handleShutdown = () => {
+  if (shuttingDownFromSignal) {
+    // Second signal - force immediate exit
+    process.exit(0);
+  }
+  shuttingDownFromSignal = true;
   ptyProxy.stop();
   wss?.close();
-  httpServer?.close(() => {
-    process.exit(0);
-  });
-  // Force exit after timeout if server doesn't close cleanly
-  setTimeout(() => process.exit(0), 500);
+  httpServer?.close();
+  // Force exit quickly
+  setTimeout(() => process.exit(0), 100);
 };
 
 process.on("SIGINT", handleShutdown);
