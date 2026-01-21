@@ -728,12 +728,15 @@ httpServer.listen(args.port, () => {
 const handleShutdown = () => {
   ptyProxy.stop();
   wss?.close();
-  httpServer?.close();
+  httpServer?.close(() => {
+    process.exit(0);
+  });
+  // Force exit after timeout if server doesn't close cleanly
+  setTimeout(() => process.exit(0), 500);
 };
 
 process.on("SIGINT", handleShutdown);
 process.on("SIGTERM", handleShutdown);
-process.on("exit", () => ptyProxy.stop());
 
 function openBrowser(target: string) {
   const platform = process.platform;
