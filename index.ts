@@ -8,6 +8,7 @@ import { createInterface } from "node:readline";
 import { WebSocketServer, type WebSocket } from "ws";
 
 type CliOptions = {
+  host: string;
   port: number;
   command: string[];
   autoOpen: boolean;
@@ -135,17 +136,25 @@ if __name__ == "__main__":
 function usage(code: number = 1): never {
   console.log(
     [
-      "Usage: ghostweb [--port <port>] [--no-open] -- <command> [args...]",
+      "Usage: ghostweb [options] -- <command> [args...]",
+      "",
+      "Options:",
+      "  --host, -H <addr>   IP address to bind to (default: 127.0.0.1)",
+      "  --port, -p <port>   Port to listen on (default: 8080)",
+      "  --no-open           Don't auto-open browser",
+      "  --help, -h          Show this help",
       "",
       "Examples:",
       "  ghostweb -- bash",
       "  ghostweb --port 8081 -- claude --dangerously-skip-permissions",
+      "  ghostweb --host 0.0.0.0 -- htop",
     ].join("\n"),
   );
   process.exit(code);
 }
 
 function parseArgs(argv: string[]): CliOptions {
+  let host = "127.0.0.1";
   let port = 8080;
   let autoOpen = true;
   const command: string[] = [];
@@ -159,6 +168,17 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     switch (arg) {
+      case "--host":
+      case "-H": {
+        const next = argv[i + 1];
+        if (!next) {
+          console.error("Missing value after --host");
+          usage();
+        }
+        host = next;
+        i += 1;
+        break;
+      }
       case "--port":
       case "-p": {
         const next = argv[i + 1];
@@ -171,7 +191,7 @@ function parseArgs(argv: string[]): CliOptions {
           console.error(`Invalid port: ${next}`);
           usage();
         }
-        i += 1; // skip port value
+        i += 1;
         break;
       }
       case "--no-open": {
@@ -198,7 +218,7 @@ function parseArgs(argv: string[]): CliOptions {
     usage();
   }
 
-  return { port, command, autoOpen };
+  return { host, port, command, autoOpen };
 }
 
 function shellEscape(value: string): string {
@@ -796,9 +816,11 @@ wss.on("connection", (ws: WebSocket) => {
 });
 
 // Start server
-httpServer.listen(args.port, () => {
-  const url = `http://localhost:${args.port}`;
-  console.log(`Serving ghostty-web at ${url}`);
+httpServer.listen(args.port, args.host, () => {
+  // For browser URL, use localhost if binding to all interfaces
+  const browserHost = args.host === "0.0.0.0" ? "localhost" : args.host;
+  const url = `http://${browserHost}:${args.port}`;
+  console.log(`Serving ghostty-web at ${url} (bound to ${args.host})`);
   console.log(`Running: ${args.command.map(shellEscape).join(" ")}`);
 
   if (args.autoOpen) {
