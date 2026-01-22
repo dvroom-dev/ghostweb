@@ -59,10 +59,10 @@ bun run build
 
 ## Build a standalone binary
 
-You can produce a self-contained executable that embeds the ghostty-web client and Python PTY helper:
+You can produce a self-contained executable that embeds the ghostty-web client:
 
 ```bash
-bun build index.ts --compile --outfile ghostweb
+bun run build:standalone ghostweb
 ./ghostweb --port 8080 -- bash
 ```
 

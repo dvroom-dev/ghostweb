@@ -554,7 +554,12 @@ function startPtyProxy(command: string[], onEvent: (event: ProxyEvent) => void):
 
 const args = parseArgs(process.argv.slice(2));
 
-function findGhosttyDist(): string {
+// Embedded assets for standalone builds (populated by build script)
+const EMBEDDED_GHOSTTY_WEB_JS: string | null = null;
+const EMBEDDED_GHOSTTY_VT_WASM: string | null = null; // base64 encoded
+const EMBEDDED_VITE_EXTERNAL_JS: string | null = null;
+
+function findGhosttyDist(): string | null {
   const possiblePaths = [
     // Development: running from source
     join(__dirname, "node_modules", "ghostty-web", "dist"),
@@ -570,16 +575,22 @@ function findGhosttyDist(): string {
     }
   }
 
-  throw new Error("Could not find ghostty-web. Make sure ghostty-web is installed.");
+  return null;
 }
 
 const ghosttyDist = findGhosttyDist();
 
-const ghosttyFiles = new Map<string, string>([
+// Check we have either embedded assets or filesystem access
+if (!ghosttyDist && !EMBEDDED_GHOSTTY_WEB_JS) {
+  console.error("Could not find ghostty-web. Make sure ghostty-web is installed.");
+  process.exit(1);
+}
+
+const ghosttyFiles = ghosttyDist ? new Map<string, string>([
   ["/ghostty-web.js", join(ghosttyDist, "ghostty-web.js")],
   ["/ghostty-vt.wasm", join(ghosttyDist, "ghostty-vt.wasm")],
   ["/__vite-browser-external-2447137e.js", join(ghosttyDist, "__vite-browser-external-2447137e.js")],
-]);
+]) : null;
 
 const mimeLookup: Record<string, string> = {
   ".js": "application/javascript",
@@ -685,19 +696,73 @@ httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
-  // Serve ghostty-web files
-  const ghosttyPath = ghosttyFiles.get(url.pathname);
-  if (ghosttyPath && existsSync(ghosttyPath)) {
-    const ext = extname(ghosttyPath);
-    const contentType = mimeLookup[ext] ?? "application/octet-stream";
-    const stat = statSync(ghosttyPath);
-    res.writeHead(200, {
-      "Content-Type": contentType,
-      "Content-Length": stat.size,
-      "Cache-Control": "public, max-age=86400",
-    });
-    createReadStream(ghosttyPath).pipe(res);
-    return;
+  // Serve ghostty-web files (embedded or from filesystem)
+  if (url.pathname === "/ghostty-web.js") {
+    if (EMBEDDED_GHOSTTY_WEB_JS) {
+      res.writeHead(200, {
+        "Content-Type": "application/javascript",
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(EMBEDDED_GHOSTTY_WEB_JS);
+      return;
+    }
+    const filePath = ghosttyFiles?.get(url.pathname);
+    if (filePath && existsSync(filePath)) {
+      const stat = statSync(filePath);
+      res.writeHead(200, {
+        "Content-Type": "application/javascript",
+        "Content-Length": stat.size,
+        "Cache-Control": "public, max-age=86400",
+      });
+      createReadStream(filePath).pipe(res);
+      return;
+    }
+  }
+
+  if (url.pathname === "/ghostty-vt.wasm") {
+    if (EMBEDDED_GHOSTTY_VT_WASM) {
+      const wasmBuffer = Buffer.from(EMBEDDED_GHOSTTY_VT_WASM, "base64");
+      res.writeHead(200, {
+        "Content-Type": "application/wasm",
+        "Content-Length": wasmBuffer.length,
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(wasmBuffer);
+      return;
+    }
+    const filePath = ghosttyFiles?.get(url.pathname);
+    if (filePath && existsSync(filePath)) {
+      const stat = statSync(filePath);
+      res.writeHead(200, {
+        "Content-Type": "application/wasm",
+        "Content-Length": stat.size,
+        "Cache-Control": "public, max-age=86400",
+      });
+      createReadStream(filePath).pipe(res);
+      return;
+    }
+  }
+
+  if (url.pathname === "/__vite-browser-external-2447137e.js") {
+    if (EMBEDDED_VITE_EXTERNAL_JS) {
+      res.writeHead(200, {
+        "Content-Type": "application/javascript",
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(EMBEDDED_VITE_EXTERNAL_JS);
+      return;
+    }
+    const filePath = ghosttyFiles?.get(url.pathname);
+    if (filePath && existsSync(filePath)) {
+      const stat = statSync(filePath);
+      res.writeHead(200, {
+        "Content-Type": "application/javascript",
+        "Content-Length": stat.size,
+        "Cache-Control": "public, max-age=86400",
+      });
+      createReadStream(filePath).pipe(res);
+      return;
+    }
   }
 
   // Serve index HTML for all other routes
