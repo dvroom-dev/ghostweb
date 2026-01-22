@@ -8,6 +8,9 @@ out
 dist
 *.tgz
 .build-standalone-temp.ts
+ghostweb
+webghost
+ghostweb-*
 
 # code coverage
 coverage
