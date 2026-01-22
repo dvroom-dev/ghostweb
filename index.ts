@@ -647,14 +647,21 @@ function handleClientMessage(raw: string | Buffer) {
 }
 
 // Start PTY proxy
+// Use streaming TextDecoder to handle UTF-8 sequences split across chunks
+const outputDecoder = new TextDecoder("utf-8", { fatal: false });
 try {
   ptyProxy = startPtyProxy(args.command, (event) => {
     if (event.type === "output") {
-      const decoded = Buffer.from(event.data, "base64").toString("utf-8");
+      const decoded = outputDecoder.decode(Buffer.from(event.data, "base64"), { stream: true });
       if (decoded.length > 0) {
         broadcast({ type: "output", data: decoded });
       }
     } else if (event.type === "exit") {
+      // Flush any remaining bytes in the decoder
+      const remaining = outputDecoder.decode();
+      if (remaining.length > 0) {
+        broadcast({ type: "output", data: remaining });
+      }
       broadcast({ type: "exit", code: event.code ?? undefined, signal: event.signal ?? undefined });
       stopServerSoon();
     }
